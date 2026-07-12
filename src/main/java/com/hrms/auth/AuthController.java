@@ -49,22 +49,7 @@ public class AuthController {
                 .map(item -> item.getAuthority())
                 .collect(Collectors.toList());
 
-        // Auto check-in upon login
-        employeeRepository.findByUserId(userDetails.getId()).ifPresent(emp -> {
-            LocalDate today = LocalDate.now();
-            boolean alreadyCheckedIn = attendanceRepository.findByEmployeeIdAndWorkDate(emp.getId(), today).isPresent();
-            if (!alreadyCheckedIn) {
-                Attendance att = new Attendance();
-                att.setEmployee(emp);
-                att.setWorkDate(today);
-                LocalTime checkInTime = LocalTime.now();
-                att.setCheckInTime(checkInTime);
-                boolean late = checkInTime.isAfter(LocalTime.of(9, 0));
-                att.setLate(late);
-                att.setStatus(late ? "LATE" : "PRESENT");
-                attendanceRepository.save(att);
-            }
-        });
+
 
         return ResponseEntity.ok(new JwtResponse(jwt, 
                                                  userDetails.getId(), 

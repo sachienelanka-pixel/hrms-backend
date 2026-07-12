@@ -23,7 +23,7 @@ public class AttendanceController {
     @Autowired private EmployeeRepository employeeRepo;
 
     @PostMapping("/check-in")
-    public ResponseEntity<?> checkIn(Authentication authentication) {
+    public ResponseEntity<?> checkIn(Authentication authentication, @RequestParam(required = false) String time) {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
         return employeeRepo.findByUserId(userDetails.getId()).map(emp -> {
             LocalDate today = LocalDate.now();
@@ -34,8 +34,9 @@ public class AttendanceController {
             Attendance att = new Attendance();
             att.setEmployee(emp);
             att.setWorkDate(today);
-            att.setCheckInTime(LocalTime.now());
-            boolean late = LocalTime.now().isAfter(LocalTime.of(9, 0));
+            LocalTime checkInTime = time != null && !time.isEmpty() ? LocalTime.parse(time) : LocalTime.now();
+            att.setCheckInTime(checkInTime);
+            boolean late = checkInTime.isAfter(LocalTime.of(9, 0));
             att.setLate(late);
             att.setStatus(late ? "LATE" : "PRESENT");
             return ResponseEntity.ok(attendanceRepo.save(att));
@@ -43,7 +44,7 @@ public class AttendanceController {
     }
 
     @PostMapping("/check-out")
-    public ResponseEntity<?> checkOut(Authentication authentication) {
+    public ResponseEntity<?> checkOut(Authentication authentication, @RequestParam(required = false) String time) {
         UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
         return employeeRepo.findByUserId(userDetails.getId()).map(emp -> {
             LocalDate today = LocalDate.now();
@@ -55,7 +56,8 @@ public class AttendanceController {
             if (att.getCheckOutTime() != null) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Already checked out today"));
             }
-            att.setCheckOutTime(LocalTime.now());
+            LocalTime checkOutTime = time != null && !time.isEmpty() ? LocalTime.parse(time) : LocalTime.now();
+            att.setCheckOutTime(checkOutTime);
             return ResponseEntity.ok(attendanceRepo.save(att));
         }).orElse(ResponseEntity.status(404).body(Map.of("error", "Employee profile not found")));
     }
