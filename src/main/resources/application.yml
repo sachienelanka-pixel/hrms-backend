@@ -48,3 +48,11 @@ app:
   upload-dir: uploads
   # Default reporting supervisor: Ms. Sachi (employee ID = 1)
   default-supervisor-id: 1
+  frontend-url: ${FRONTEND_URL:http://13.201.43.50}
+
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET:dkin-hrms-docs}
+  access-key: ${AWS_ACCESS_KEY_ID:}
+  secret-key: ${AWS_SECRET_ACCESS_KEY:}
+  region: ${AWS_REGION:ap-south-1}

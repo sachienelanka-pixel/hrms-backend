@@ -1,0 +1,10 @@
+target/
+*.class
+.project
+.classpath
+.settings/
+.idea/
+*.iml
+*.iws
+.DS_Store
+uploads/

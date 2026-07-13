@@ -3,6 +3,7 @@ package com.hrms.task;
 import com.hrms.auth.UserDetailsImpl;
 import com.hrms.employee.Employee;
 import com.hrms.employee.EmployeeRepository;
+import com.hrms.service.S3Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ public class DailyTaskController {
 
     @Autowired private DailyTaskRepository taskRepo;
     @Autowired private EmployeeRepository empRepo;
+    @Autowired private S3Service s3Service;
 
     @Value("${app.upload-dir:uploads}")
     private String uploadDir;
@@ -60,22 +62,16 @@ public class DailyTaskController {
 
         // Save uploaded evidence files
         try {
-            String empDir = uploadDir + "/tasks/" + employee.getId() + "/";
-            Files.createDirectories(Paths.get(empDir));
-
-            String uid = UUID.randomUUID().toString().substring(0, 8);
-            String file1 = uid + "_1_" + sanitize(evidence1.getOriginalFilename());
-            String file2 = uid + "_2_" + sanitize(evidence2.getOriginalFilename());
-
-            Files.copy(evidence1.getInputStream(), Paths.get(empDir + file1), StandardCopyOption.REPLACE_EXISTING);
-            Files.copy(evidence2.getInputStream(), Paths.get(empDir + file2), StandardCopyOption.REPLACE_EXISTING);
+            String folder = "tasks/" + employee.getId();
+            String fileUrl1 = s3Service.uploadFile(evidence1, folder);
+            String fileUrl2 = s3Service.uploadFile(evidence2, folder);
 
             DailyTask task = new DailyTask();
             task.setEmployee(employee);
             task.setTaskDate(taskDate);
             task.setTaskDescription(taskDescription);
-            task.setEvidence1Url("/uploads/tasks/" + employee.getId() + "/" + file1);
-            task.setEvidence2Url("/uploads/tasks/" + employee.getId() + "/" + file2);
+            task.setEvidence1Url(fileUrl1);
+            task.setEvidence2Url(fileUrl2);
             task.setLate(isLate);
             task.setLateReason(lateReason);
             task.setStatus("PENDING");
@@ -87,7 +83,7 @@ public class DailyTaskController {
                     "taskId", task.getId(),
                     "date", taskDate.toString()
             ));
-        } catch (IOException e) {
+        } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Failed to save evidence files: " + e.getMessage()));
         }
