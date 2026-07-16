@@ -64,7 +64,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(List.of(
             "http://localhost:5173", 
             "http://localhost:3000",
-            "http://dkin-hrms.s3-website.ap-south-1.amazonaws.com", "https://d1kbf31nvx0xfz.cloudfront.net"
+            "http://dkin-hrms.s3-website.ap-south-1.amazonaws.com", "https://d1kbf31nvx0xfz.cloudfront.net","https://dkin-hrms.space"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
