@@ -82,6 +82,8 @@ public class DataSeeder implements CommandLineRunner {
         LeaveType study     = getOrCreateLeaveType("Study Leave",     true,  false, 0,  14);
         LeaveType noPay     = getOrCreateLeaveType("No Pay Leave",    false, false, 0,  0);
         LeaveType maternity = getOrCreateLeaveType("Maternity Leave", true,  false, 0,  90);
+        LeaveType duty      = getOrCreateLeaveType("Duty Leave",      true,  false, 0,  0);
+        LeaveType official  = getOrCreateLeaveType("Official Leave",  true,  false, 0,  0);
 
         // ======== USERS & EMPLOYEES ========
         // 1. Default Super Admin
