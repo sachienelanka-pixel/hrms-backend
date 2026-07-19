@@ -188,7 +188,7 @@ public class EmailService {
                 + "<div class='cred-item'><span class='cred-label'>Temporary Password:</span> " + password + "</div>"
                 + "</div>"
                 + "Please log in and change your password after your first login.<br/><br/>"
-                + "<a href='http://localhost:5173/login' class='btn'>Log In to System</a>"
+                + "<a href='https://dkin-hrms.space/login' class='btn'>Log In to System</a>"
                 + "<div class='footer'>"
                 + "Best Regards,<br/>"
                 + "HR / Administration Team"

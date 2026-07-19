@@ -109,6 +109,52 @@ public class LeaveController {
             request.setLeaveDays(computed);
         }
 
+        // ── Intern / Associate Leave Quota Rules ─────────────────────────────────
+        // Applies to all leave types EXCEPT Duty Leave and Official Leave.
+        // Rules (based on months since joining date):
+        //   Month 1          → 0 leaves allowed
+        //   Months 2–6       → 2 leaves total (cumulative)
+        //   Month 7 onwards  → 1 leave per month earned (e.g. month 7 = 1, month 8 = 2, ...)
+        String empType = emp.getEmploymentType() != null ? emp.getEmploymentType().toLowerCase() : "";
+        String desigTitle = emp.getDesignation() != null && emp.getDesignation().getTitle() != null
+                ? emp.getDesignation().getTitle().toLowerCase() : "";
+        boolean isInternOrAssociate = empType.contains("intern") || desigTitle.contains("intern") || desigTitle.contains("associate");
+        String ltNameLower = lt.getName().toLowerCase();
+        boolean isDutyOrOfficial = ltNameLower.contains("duty") || ltNameLower.contains("official");
+
+        if (isInternOrAssociate && !isDutyOrOfficial && emp.getJoiningDate() != null) {
+            java.time.LocalDate joinDate = emp.getJoiningDate();
+            java.time.LocalDate today = java.time.LocalDate.now();
+            long monthsSinceJoin = java.time.temporal.ChronoUnit.MONTHS.between(
+                    joinDate.withDayOfMonth(1), today.withDayOfMonth(1));
+
+            // Month 1 (monthsSinceJoin == 0): No leaves allowed
+            if (monthsSinceJoin < 1) {
+                return ResponseEntity.badRequest().body(Map.of("error",
+                        "No leaves are allowed during the first month of joining."));
+            }
+
+            // Calculate allowed quota
+            double allowedDays;
+            if (monthsSinceJoin <= 5) {
+                // Months 2–6: flat 2 days total
+                allowedDays = 2.0;
+            } else {
+                // Month 7 onwards: 1 day per month since month 7 (monthsSinceJoin - 5 gives months from 7th onward)
+                allowedDays = monthsSinceJoin - 5;
+            }
+
+            // Get total already used/pending leaves (excluding duty & official)
+            double usedDays = leaveRequestRepo.sumUsedLeavesByEmployeeIdExcludingDutyAndOfficial(emp.getId());
+
+            if (usedDays + request.getLeaveDays() > allowedDays) {
+                double remaining = Math.max(0, allowedDays - usedDays);
+                return ResponseEntity.badRequest().body(Map.of("error",
+                        String.format("Leave quota exceeded. You have %.1f day(s) remaining out of your %.1f day allowance.", remaining, allowedDays)));
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────────
+
         if (lt.isPaid()) {
             int currentYear = Year.now().getValue();
             var balance = leaveBalanceRepo.findByEmployeeIdAndLeaveTypeIdAndYear(emp.getId(), lt.getId(), currentYear);
