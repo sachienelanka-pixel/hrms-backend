@@ -22,6 +22,7 @@ import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -42,6 +43,7 @@ public class DataSeeder implements CommandLineRunner {
     @Autowired PasswordEncoder encoder;
     @Autowired DailyTaskRepository dailyTaskRepo;
     @Autowired LeaveRequestRepository leaveRequestRepo;
+    @Autowired JdbcTemplate jdbcTemplate;
 
     @Override
     @Transactional
@@ -98,6 +100,14 @@ public class DataSeeder implements CommandLineRunner {
 
         System.out.println("[Seeder] ✅ All seed data loaded successfully.");
         System.out.println("[Seeder] Users: superadmin/admin123, sachie.nelanka/sachie123 (Both are Super Admins)");
+
+        // Set the starting AUTO_INCREMENT for the employees table to 26
+        try {
+            jdbcTemplate.execute("ALTER TABLE employees AUTO_INCREMENT = 26");
+            System.out.println("[Seeder] ✅ Employees AUTO_INCREMENT set to 26.");
+        } catch (Exception e) {
+            System.err.println("[Seeder] ⚠️ Could not set AUTO_INCREMENT. Ignore if using H2/PostgreSQL without MySQL dialect.");
+        }
     }
 
     // ─── helpers ────────────────────────────────────────────────────────────
