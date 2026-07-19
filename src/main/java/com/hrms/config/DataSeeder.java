@@ -48,7 +48,7 @@ public class DataSeeder implements CommandLineRunner {
     public void run(String... args) throws Exception {
 
         // ======== ROLES ========
-        List<String> requiredRoles = Arrays.asList("ROLE_SUPER_ADMIN", "ROLE_ADMIN", "ROLE_HR_MANAGER", "ROLE_MANAGER", "ROLE_EMPLOYEE");
+        List<String> requiredRoles = Arrays.asList("ROLE_SUPER_ADMIN", "ROLE_ADMIN", "ROLE_HR_MANAGER", "ROLE_MANAGER", "ROLE_EMPLOYEE", "ROLE_INTERNSHIP_SUPERVISOR");
         for (String name : requiredRoles) {
             if (roleRepo.findByName(name).isEmpty()) {
                 Role r = new Role();
@@ -71,6 +71,7 @@ public class DataSeeder implements CommandLineRunner {
         Designation swe       = getOrCreateDesig("Software Engineer");
         Designation salesMgr  = getOrCreateDesig("Sales Manager");
         Designation accountant= getOrCreateDesig("Accountant");
+        Designation internSup = getOrCreateDesig("Internship Supervisor");
 
         // ======== LEAVE TYPES ========
         LeaveType annual    = getOrCreateLeaveType("Annual Leave",    true,  true,  10, 21);
@@ -88,103 +89,15 @@ public class DataSeeder implements CommandLineRunner {
         seedLeaveBalances(superAdminEmp, annual, sick, casual, study);
         seedAttendanceToday(superAdminEmp);
 
-        // Admin
-        User adminUser = getOrCreateUser("admin", "admin123", "ROLE_ADMIN");
-        Employee adminEmp = getOrCreateEmployee(adminUser, "Super", "Admin",
-                "admin@company.com", it, ceo, null, "FULL_TIME");
-        seedLeaveBalances(adminEmp, annual, sick, casual, study);
-        seedAttendanceToday(adminEmp);
-
-        // HR Manager
-        User hrUser = getOrCreateUser("hrmanager", "hr123", "ROLE_HR_MANAGER");
-        Employee hrEmp = getOrCreateEmployee(hrUser, "Sara", "Johnson",
-                "sara.johnson@company.com", hr, hrMgr, null, "FULL_TIME");
-        seedLeaveBalances(hrEmp, annual, sick, casual, study);
-        seedAttendanceToday(hrEmp);
-
-        // Manager
-        User managerUser = getOrCreateUser("manager", "manager123", "ROLE_MANAGER");
-        Employee managerEmp = getOrCreateEmployee(managerUser, "David", "Williams",
-                "david.williams@company.com", it, swe, null, "FULL_TIME");
-        seedLeaveBalances(managerEmp, annual, sick, casual, study);
-        seedAttendanceToday(managerEmp);
-
-        // Employee 1 — reports to manager
-        User emp1User = getOrCreateUser("employee1", "emp123", "ROLE_EMPLOYEE");
-        Employee emp1 = getOrCreateEmployee(emp1User, "Alice", "Brown",
-                "alice.brown@company.com", it, swe, managerEmp, "FULL_TIME");
-        seedLeaveBalances(emp1, annual, sick, casual, study);
-
-        // Employee 2
-        User emp2User = getOrCreateUser("employee2", "emp123", "ROLE_EMPLOYEE");
-        Employee emp2 = getOrCreateEmployee(emp2User, "Bob", "Martinez",
-                "bob.martinez@company.com", sales, salesMgr, null, "FULL_TIME");
-        seedLeaveBalances(emp2, annual, sick, casual, study);
-
-        // Employee 3
-        User emp3User = getOrCreateUser("employee3", "emp123", "ROLE_EMPLOYEE");
-        Employee emp3 = getOrCreateEmployee(emp3User, "Clara", "Lee",
-                "clara.lee@company.com", fin, accountant, null, "PART_TIME");
-        seedLeaveBalances(emp3, annual, sick, casual, study);
-
-        // ======== EXTRA DUMMY DATA FOR TESTING SCENARIOS ========
-        // 1. Jane Doe (newemployee) - reports to manager, has no attendance today, has pending/approved/rejected tasks, pending/approved leaves
-        User newEmpUser = getOrCreateUser("newemployee", "emp123", "ROLE_EMPLOYEE");
-        Employee newEmp = getOrCreateEmployee(newEmpUser, "Jane", "Doe",
-                "jane.doe@company.com", it, swe, managerEmp, "CONTRACT");
-        seedLeaveBalances(newEmp, annual, sick, casual, study);
-        // Note: NO attendance today so they can test Clock In!
-
-        // Seed tasks for newemployee
-        getOrCreateDailyTask(newEmp, LocalDate.now().minusDays(1), 
-                "Implemented user login authentication endpoint and integration tests.", 
-                "APPROVED", 0.0, "Excellent work, tests passed successfully.", managerEmp);
-        getOrCreateDailyTask(newEmp, LocalDate.now(), 
-                "Refactored LeaveController and added validation logic for holidays.", 
-                "PENDING", 0.0, null, null);
-        getOrCreateDailyTask(newEmp, LocalDate.now().minusDays(2), 
-                "Created test cases for AttendanceController.", 
-                "REJECTED", 0.5, "Please add more assertions and edge cases.", managerEmp);
-
-        // Seed leave requests for newemployee
-        getOrCreateLeaveRequest(newEmp, study, LocalDate.now().plusDays(2), LocalDate.now().plusDays(4), 
-                3.0, "University Final Exams", "PENDING", null);
-        getOrCreateLeaveRequest(newEmp, casual, LocalDate.now().minusDays(10), LocalDate.now().minusDays(8), 
-                2.0, "Family function", "APPROVED", managerEmp);
-
-        // 2. Bob Miller (rejectedemp) - has multiple rejected tasks to show cumulative extension days
-        User rejectedEmpUser = getOrCreateUser("rejectedemp", "emp123", "ROLE_EMPLOYEE");
-        Employee rejectedEmp = getOrCreateEmployee(rejectedEmpUser, "Bob", "Miller",
-                "bob.miller@company.com", it, swe, managerEmp, "CONTRACT");
-        seedLeaveBalances(rejectedEmp, annual, sick, casual, study);
-        seedAttendanceToday(rejectedEmp);
-
-        getOrCreateDailyTask(rejectedEmp, LocalDate.now().minusDays(3), 
-                "UI layout design for user profile page", 
-                "REJECTED", 1.0, "Design does not match technical specs. Please revise.", managerEmp);
-        getOrCreateDailyTask(rejectedEmp, LocalDate.now().minusDays(2), 
-                "Added mock APIs for employee registration", 
-                "REJECTED", 0.5, "Mock data is missing key fields.", managerEmp);
-        getOrCreateDailyTask(rejectedEmp, LocalDate.now().minusDays(1), 
-                "Fixed bugs in employee registration form", 
-                "APPROVED", 0.0, "Looks good now.", managerEmp);
-
-        // 3. Alice Johnson (newmanager) - ROLE_MANAGER, IT Department, reports to null
-        User newMgrUser = getOrCreateUser("newmanager", "manager123", "ROLE_MANAGER");
-        Employee newMgr = getOrCreateEmployee(newMgrUser, "Alice", "Johnson",
-                "alice.johnson@company.com", it, swe, null, "FULL_TIME");
-        seedLeaveBalances(newMgr, annual, sick, casual, study);
-        seedAttendanceToday(newMgr);
-
-        // 4. Charlie Green (newhr) - ROLE_HR_MANAGER, HR Department, reports to null
-        User newHrUser = getOrCreateUser("newhr", "hr123", "ROLE_HR_MANAGER");
-        Employee newHr = getOrCreateEmployee(newHrUser, "Charlie", "Green",
-                "charlie.green@company.com", hr, hrMgr, null, "FULL_TIME");
-        seedLeaveBalances(newHr, annual, sick, casual, study);
-        seedAttendanceToday(newHr);
+        // Sachie Nelanka (Internship Supervisor)
+        User sachieUser = getOrCreateUser("sachie.nelanka", "sachie123", "ROLE_INTERNSHIP_SUPERVISOR");
+        Employee sachieEmp = getOrCreateEmployee(sachieUser, "Sachie", "Nelanka",
+                "sachie.nelanka@company.com", hr, internSup, null, "FULL_TIME");
+        seedLeaveBalances(sachieEmp, annual, sick, casual, study);
+        seedAttendanceToday(sachieEmp);
 
         System.out.println("[Seeder] ✅ All seed data loaded successfully.");
-        System.out.println("[Seeder] Users: admin/admin123, hrmanager/hr123, manager/manager123, employee1-3/emp123, newemployee/emp123, rejectedemp/emp123, newmanager/manager123, newhr/hr123");
+        System.out.println("[Seeder] Users: superadmin/admin123, sachie.nelanka/sachie123");
     }
 
     // ─── helpers ────────────────────────────────────────────────────────────
