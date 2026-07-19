@@ -82,22 +82,22 @@ public class DataSeeder implements CommandLineRunner {
         LeaveType maternity = getOrCreateLeaveType("Maternity Leave", true,  false, 0,  90);
 
         // ======== USERS & EMPLOYEES ========
-        // Super Admin
+        // 1. Default Super Admin
         User superAdminUser = getOrCreateUser("superadmin", "admin123", "ROLE_SUPER_ADMIN");
         Employee superAdminEmp = getOrCreateEmployee(superAdminUser, "Super", "Admin",
                 "superadmin@company.com", it, ceo, null, "FULL_TIME");
         seedLeaveBalances(superAdminEmp, annual, sick, casual, study);
         seedAttendanceToday(superAdminEmp);
 
-        // Sachie Nelanka (Internship Supervisor)
-        User sachieUser = getOrCreateUser("sachie.nelanka", "sachie123", "ROLE_INTERNSHIP_SUPERVISOR");
+        // 2. Sachie Nelanka (Super Admin)
+        User sachieUser = getOrCreateUser("sachie.nelanka", "sachie123", "ROLE_SUPER_ADMIN");
         Employee sachieEmp = getOrCreateEmployee(sachieUser, "Sachie", "Nelanka",
-                "sachie.nelanka@company.com", hr, internSup, null, "FULL_TIME");
+                "sachie.nelanka@company.com", hr, hrMgr, null, "FULL_TIME");
         seedLeaveBalances(sachieEmp, annual, sick, casual, study);
         seedAttendanceToday(sachieEmp);
 
         System.out.println("[Seeder] ✅ All seed data loaded successfully.");
-        System.out.println("[Seeder] Users: superadmin/admin123, sachie.nelanka/sachie123");
+        System.out.println("[Seeder] Users: superadmin/admin123, sachie.nelanka/sachie123 (Both are Super Admins)");
     }
 
     // ─── helpers ────────────────────────────────────────────────────────────
