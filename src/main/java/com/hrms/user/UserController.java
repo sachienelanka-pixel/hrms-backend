@@ -3,6 +3,7 @@ package com.hrms.user;
 import com.hrms.employee.Employee;
 import com.hrms.employee.EmployeeRepository;
 import com.hrms.department.DepartmentRepository;
+import com.hrms.department.Designation;
 import com.hrms.department.DesignationRepository;
 import com.hrms.leave.*;
 import com.hrms.auth.UserDetailsImpl;
@@ -189,6 +190,7 @@ public class UserController {
             int lastNameIdx = -1;
             int emailIdx = -1;
             int dateOfJoinIdx = -1;
+            int designationIdx = -1;
 
             for (Cell cell : headerRow) {
                 if (cell.getCellType() != CellType.STRING) continue;
@@ -203,6 +205,8 @@ public class UserController {
                     emailIdx = cell.getColumnIndex();
                 } else if (headerText.contains("date of join") || headerText.contains("joining date") || headerText.contains("date of joining") || headerText.contains("join date")) {
                     dateOfJoinIdx = cell.getColumnIndex();
+                } else if (headerText.contains("designation") || headerText.contains("job role") || headerText.contains("role")) {
+                    designationIdx = cell.getColumnIndex();
                 }
             }
 
@@ -240,6 +244,7 @@ public class UserController {
                 String lastName = getCellValueAsString(row.getCell(lastNameIdx)).trim();
                 String email = getCellValueAsString(row.getCell(emailIdx)).trim().toLowerCase();
                 String dateOfJoinStr = getCellValueAsString(row.getCell(dateOfJoinIdx)).trim();
+                String designationTitle = designationIdx != -1 ? getCellValueAsString(row.getCell(designationIdx)).trim() : "";
 
                 // Validate required fields
                 if (firstName.isEmpty() || lastName.isEmpty() || email.isEmpty() || dateOfJoinStr.isEmpty()) {
@@ -294,7 +299,24 @@ public class UserController {
                     emp.setLastName(lastName);
                     emp.setPersonalEmail(email);
                     emp.setGender("N/A");
-                    emp.setEmploymentType("FULL_TIME");
+                    
+                    boolean isIntern = false;
+                    boolean isAssociate = false;
+                    
+                    if (!designationTitle.isEmpty()) {
+                        Designation desig = desigRepo.findByTitle(designationTitle).orElseGet(() -> {
+                            Designation d = new Designation();
+                            d.setTitle(designationTitle);
+                            return desigRepo.save(d);
+                        });
+                        emp.setDesignation(desig);
+                        
+                        String lowerTitle = designationTitle.toLowerCase();
+                        isIntern = lowerTitle.contains("intern");
+                        isAssociate = lowerTitle.contains("associate");
+                    }
+                    
+                    emp.setEmploymentType(isIntern ? "INTERNSHIP" : "FULL_TIME");
                     emp.setStatus("ACTIVE");
                     emp.setEmploymentStatus("Active");
                     emp.setJoiningDate(dateOfJoin);
@@ -310,12 +332,26 @@ public class UserController {
 
                     // Set default leave balances
                     int year = Year.now().getValue();
+                    boolean finalIsIntern = isIntern;
+                    boolean finalIsAssociate = isAssociate;
+                    
                     leaveTypeRepo.findAll().forEach(lt -> {
                         LeaveBalance lb = new LeaveBalance();
                         lb.setEmployee(emp);
                         lb.setLeaveType(lt);
                         lb.setYear(year);
-                        lb.setAllocatedDays(lt.getDaysPerYear());
+                        
+                        String ltName = lt.getName().toLowerCase();
+                        int allocatedDays = lt.getDaysPerYear();
+                        
+                        // Interns & Associates don't get Casual, Annual, or Maternity leave
+                        if (finalIsIntern || finalIsAssociate) {
+                            if (ltName.contains("casual") || ltName.contains("annual") || ltName.contains("maternity") || ltName.contains("no pay")) {
+                                allocatedDays = 0;
+                            }
+                        }
+                        
+                        lb.setAllocatedDays(allocatedDays);
                         leaveBalanceRepo.save(lb);
                     });
 
