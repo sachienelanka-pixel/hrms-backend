@@ -136,6 +136,11 @@ public class UserController {
 
         // Auto-create leave balances
         int year = Year.now().getValue();
+        // Detect intern / associate from designation or employment type
+        String empDesigTitle = emp.getDesignation() != null ? emp.getDesignation().getTitle().toLowerCase() : "";
+        String empTypeStr    = emp.getEmploymentType() != null ? emp.getEmploymentType().toLowerCase() : "";
+        boolean newEmpIsIntern    = empDesigTitle.contains("intern") || empTypeStr.contains("intern");
+        boolean newEmpIsAssociate = empDesigTitle.contains("associate");
         leaveTypeRepo.findAll().forEach(lt -> {
             boolean exists = leaveBalanceRepo
                     .findByEmployeeIdAndLeaveTypeIdAndYear(emp.getId(), lt.getId(), year).isPresent();
@@ -144,7 +149,18 @@ public class UserController {
                 lb.setEmployee(emp);
                 lb.setLeaveType(lt);
                 lb.setYear(year);
-                lb.setAllocatedDays(lt.getDaysPerYear());
+
+                int allocatedDays = lt.getDaysPerYear();
+                // Interns & Associates don't get Casual, Annual, Maternity, or No Pay leave
+                if (newEmpIsIntern || newEmpIsAssociate) {
+                    String ltName = lt.getName().toLowerCase();
+                    if (ltName.contains("casual") || ltName.contains("annual")
+                            || ltName.contains("maternity") || ltName.contains("no pay")) {
+                        allocatedDays = 0;
+                    }
+                }
+
+                lb.setAllocatedDays(allocatedDays);
                 leaveBalanceRepo.save(lb);
             }
         });
@@ -211,12 +227,12 @@ public class UserController {
             }
 
             if (firstNameIdx == -1 || lastNameIdx == -1 || emailIdx == -1 || dateOfJoinIdx == -1) {
-                return ResponseEntity.badRequest().body(Map.of("error", 
-                    "Excel is missing required headers. Found: " + 
-                    "First Name=" + (firstNameIdx != -1) + 
-                    ", Last Name=" + (lastNameIdx != -1) + 
-                    ", Personal Email=" + (emailIdx != -1) + 
-                    ", Date of Join=" + (dateOfJoinIdx != -1)));
+                return ResponseEntity.badRequest().body(Map.of("error",
+                        "Excel is missing required headers. Found: " +
+                                "First Name=" + (firstNameIdx != -1) +
+                                ", Last Name=" + (lastNameIdx != -1) +
+                                ", Personal Email=" + (emailIdx != -1) +
+                                ", Date of Join=" + (dateOfJoinIdx != -1)));
             }
 
             Set<String> excelProcessedEmails = new HashSet<>();
@@ -299,10 +315,10 @@ public class UserController {
                     emp.setLastName(lastName);
                     emp.setPersonalEmail(email);
                     emp.setGender("N/A");
-                    
+
                     boolean isIntern = false;
                     boolean isAssociate = false;
-                    
+
                     if (!designationTitle.isEmpty()) {
                         Designation desig = desigRepo.findByTitle(designationTitle).orElseGet(() -> {
                             Designation d = new Designation();
@@ -310,12 +326,12 @@ public class UserController {
                             return desigRepo.save(d);
                         });
                         emp.setDesignation(desig);
-                        
+
                         String lowerTitle = designationTitle.toLowerCase();
                         isIntern = lowerTitle.contains("intern");
                         isAssociate = lowerTitle.contains("associate");
                     }
-                    
+
                     emp.setEmploymentType(isIntern ? "INTERNSHIP" : "FULL_TIME");
                     emp.setStatus("ACTIVE");
                     emp.setEmploymentStatus("Active");
@@ -334,23 +350,23 @@ public class UserController {
                     int year = Year.now().getValue();
                     boolean finalIsIntern = isIntern;
                     boolean finalIsAssociate = isAssociate;
-                    
+
                     leaveTypeRepo.findAll().forEach(lt -> {
                         LeaveBalance lb = new LeaveBalance();
                         lb.setEmployee(emp);
                         lb.setLeaveType(lt);
                         lb.setYear(year);
-                        
+
                         String ltName = lt.getName().toLowerCase();
                         int allocatedDays = lt.getDaysPerYear();
-                        
+
                         // Interns & Associates don't get Casual, Annual, or Maternity leave
                         if (finalIsIntern || finalIsAssociate) {
                             if (ltName.contains("casual") || ltName.contains("annual") || ltName.contains("maternity") || ltName.contains("no pay")) {
                                 allocatedDays = 0;
                             }
                         }
-                        
+
                         lb.setAllocatedDays(allocatedDays);
                         leaveBalanceRepo.save(lb);
                     });
@@ -513,8 +529,8 @@ public class UserController {
             String newPwd = (body != null && body.containsKey("password"))
                     ? body.get("password")
                     : empRepo.findByUserId(id)
-                        .map(e -> e.getFirstName().toLowerCase() + "@1234")
-                        .orElse("password@1234");
+                    .map(e -> e.getFirstName().toLowerCase() + "@1234")
+                    .orElse("password@1234");
             user.setPassword(encoder.encode(newPwd));
             userRepo.save(user);
             return ResponseEntity.ok(Map.of(
@@ -557,7 +573,7 @@ public class UserController {
     private String generateUsername(String firstName, String middleName, String lastName) {
         String first = firstName.trim().toLowerCase().replaceAll("[^a-z0-9]", "");
         String last = lastName.trim().toLowerCase().replaceAll("\\s+", "").replaceAll("[^a-z0-9]", "");
-        
+
         String middleLetter = "";
         if (middleName != null && !middleName.trim().isEmpty()) {
             String[] parts = middleName.trim().split("\\s+");
@@ -568,7 +584,7 @@ public class UserController {
                 }
             }
         }
-        
+
         if (middleLetter.isEmpty()) {
             return first + "." + last;
         } else {
@@ -598,7 +614,7 @@ public class UserController {
         String digits = "23456789";
         String special = "@#$*%!";
         String all = upper + lower + digits + special;
-        
+
         SecureRandom rnd = new SecureRandom();
         StringBuilder sb = new StringBuilder();
         // Force one of each required category
@@ -606,16 +622,16 @@ public class UserController {
         sb.append(lower.charAt(rnd.nextInt(lower.length())));
         sb.append(digits.charAt(rnd.nextInt(digits.length())));
         sb.append(special.charAt(rnd.nextInt(special.length())));
-        
+
         // Fill the rest with any allowed characters
         for (int i = 4; i < length; i++) {
             sb.append(all.charAt(rnd.nextInt(all.length())));
         }
-        
+
         // Shuffle the characters to randomize positions
         List<Character> chars = sb.chars().mapToObj(c -> (char) c).collect(Collectors.toList());
         Collections.shuffle(chars, rnd);
-        
+
         StringBuilder shuffled = new StringBuilder();
         for (char c : chars) {
             shuffled.append(c);

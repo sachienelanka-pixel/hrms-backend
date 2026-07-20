@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Period;
 import java.time.Year;
 import java.util.List;
 import java.util.Map;
@@ -95,7 +96,7 @@ public class LeaveController {
                     continue;
                 }
                 if (existing.getStartDate().compareTo(request.getEndDate()) <= 0 &&
-                    existing.getEndDate().compareTo(request.getStartDate()) >= 0) {
+                        existing.getEndDate().compareTo(request.getStartDate()) >= 0) {
                     return ResponseEntity.badRequest().body(Map.of("error",
                             "Leave request conflicts with an existing pending or approved leave request. Please cancel or modify the conflicting request first."));
                 }
@@ -109,53 +110,50 @@ public class LeaveController {
             request.setLeaveDays(computed);
         }
 
-        // ── Intern / Associate Official Leave Quota Rules ─────────────────────────
-        // Duty Leave   → UNLIMITED for everyone (no quota check)
-        // Official Leave → quota based on months since joining:
-        //   Month 1          → 0 official leaves allowed
-        //   Months 2–6       → 2 official leaves total (cumulative)
-        //   Month 7 onwards  → 1 official leave per month earned (month 7=1, month 8=2, ...)
-        String empType = emp.getEmploymentType() != null ? emp.getEmploymentType().toLowerCase() : "";
-        String desigTitle = emp.getDesignation() != null && emp.getDesignation().getTitle() != null
-                ? emp.getDesignation().getTitle().toLowerCase() : "";
-        boolean isInternOrAssociate = empType.contains("intern") || desigTitle.contains("intern") || desigTitle.contains("associate");
-        String ltNameLower = lt.getName().toLowerCase();
-        boolean isOfficialLeave = ltNameLower.contains("official");
+        // ── Intern / Associate Official Leave: compute tenure-based quota (DB always stores 0) ──
+        boolean isOfficialLeave = lt.getName().toLowerCase().contains("official");
+        String empDesig = emp.getDesignation() != null ? emp.getDesignation().getTitle().toLowerCase() : "";
+        String empType  = emp.getEmploymentType() != null ? emp.getEmploymentType().toLowerCase() : "";
+        boolean empIsInternOrAssociate = empDesig.contains("intern") || empDesig.contains("associate")
+                || empType.contains("intern");
 
-        if (isInternOrAssociate && isOfficialLeave && emp.getJoiningDate() != null) {
-            java.time.LocalDate joinDate = emp.getJoiningDate();
-            java.time.LocalDate today = java.time.LocalDate.now();
-            long monthsSinceJoin = java.time.temporal.ChronoUnit.MONTHS.between(
-                    joinDate.withDayOfMonth(1), today.withDayOfMonth(1));
+        if (isOfficialLeave && empIsInternOrAssociate) {
+            // Compute months since joining (same logic as frontend)
+            int monthsSinceJoin = 0;
+            if (emp.getJoiningDate() != null) {
+                Period period = Period.between(emp.getJoiningDate(), LocalDate.now());
+                monthsSinceJoin = period.getYears() * 12 + period.getMonths();
+                // Subtract 1 if today's day-of-month is before the joining day-of-month
+                if (LocalDate.now().getDayOfMonth() < emp.getJoiningDate().getDayOfMonth()) {
+                    monthsSinceJoin--;
+                }
+            }
 
-            // Month 1 (monthsSinceJoin == 0): No official leaves allowed
+            // Tenure-based Official Leave quota (mirrors frontend getOfficialLeaveAllowedDays)
+            double allowed;
             if (monthsSinceJoin < 1) {
-                return ResponseEntity.badRequest().body(Map.of("error",
-                        "No Official Leave is allowed during the first month of joining."));
-            }
-
-            // Calculate allowed official leave quota
-            double allowedDays;
-            if (monthsSinceJoin <= 5) {
-                // Months 2–6: flat 2 days total
-                allowedDays = 2.0;
+                allowed = 0;
+            } else if (monthsSinceJoin <= 5) {
+                allowed = 2;          // months 2–6: flat 2 days total
             } else {
-                // Month 7 onwards: 1 day per month since month 7
-                allowedDays = monthsSinceJoin - 5;
+                allowed = monthsSinceJoin - 5;  // month 7+: 1 day per month earned
             }
 
-            // Get total already used/pending Official Leave days
-            double usedDays = leaveRequestRepo.sumOfficialLeavesByEmployeeId(emp.getId());
+            // Count already-used Official Leave (PENDING + APPROVED)
+            double usedOfficial = existingRequests.stream()
+                    .filter(r -> "PENDING".equals(r.getStatus()) || "APPROVED".equals(r.getStatus()))
+                    .filter(r -> r.getLeaveType() != null
+                            && r.getLeaveType().getName().toLowerCase().contains("official"))
+                    .mapToDouble(LeaveRequest::getLeaveDays)
+                    .sum();
 
-            if (usedDays + request.getLeaveDays() > allowedDays) {
-                double remaining = Math.max(0, allowedDays - usedDays);
+            if (usedOfficial + request.getLeaveDays() > allowed) {
                 return ResponseEntity.badRequest().body(Map.of("error",
-                        String.format("Official Leave quota exceeded. You have %.1f day(s) remaining out of your %.1f day allowance.", remaining, allowedDays)));
+                        "Insufficient Official Leave balance. Earned: " + (int) allowed
+                                + " day(s), already used/pending: " + usedOfficial + " day(s)."));
             }
-        }
-        // ─────────────────────────────────────────────────────────────────────────
-
-        if (lt.isPaid()) {
+            // Quota satisfied — skip the normal balance check below
+        } else if (lt.isPaid()) {
             int currentYear = Year.now().getValue();
             var balance = leaveBalanceRepo.findByEmployeeIdAndLeaveTypeIdAndYear(emp.getId(), lt.getId(), currentYear);
             if (balance.isPresent() && balance.get().getRemainingDays() < request.getLeaveDays()) {
@@ -208,8 +206,8 @@ public class LeaveController {
 
         return leaveRequestRepo.findById(id).map(req -> {
             if (!isSuperAdmin) {
-                if (reviewer == null || req.getEmployee() == null || req.getEmployee().getManager() == null || 
-                    !req.getEmployee().getManager().getId().equals(reviewer.getId())) {
+                if (reviewer == null || req.getEmployee() == null || req.getEmployee().getManager() == null ||
+                        !req.getEmployee().getManager().getId().equals(reviewer.getId())) {
                     return ResponseEntity.status(403).body(Map.of("error", "Access denied: employee does not report to you"));
                 }
             }
@@ -219,15 +217,15 @@ public class LeaveController {
             if (reviewer != null) {
                 req.setApprovedBy(reviewer);
             }
-            
+
             // Deduct balance
             int year = req.getStartDate().getYear();
             leaveBalanceRepo.findByEmployeeIdAndLeaveTypeIdAndYear(
-                    req.getEmployee().getId(), req.getLeaveType().getId(), year)
-                .ifPresent(balance -> {
-                    balance.setUsedDays(balance.getUsedDays() + req.getLeaveDays());
-                    leaveBalanceRepo.save(balance);
-                });
+                            req.getEmployee().getId(), req.getLeaveType().getId(), year)
+                    .ifPresent(balance -> {
+                        balance.setUsedDays(balance.getUsedDays() + req.getLeaveDays());
+                        leaveBalanceRepo.save(balance);
+                    });
 
             return ResponseEntity.ok(leaveRequestRepo.save(req));
         }).orElse(ResponseEntity.notFound().build());
@@ -243,8 +241,8 @@ public class LeaveController {
 
         return leaveRequestRepo.findById(id).map(req -> {
             if (!isSuperAdmin) {
-                if (reviewer == null || req.getEmployee() == null || req.getEmployee().getManager() == null || 
-                    !req.getEmployee().getManager().getId().equals(reviewer.getId())) {
+                if (reviewer == null || req.getEmployee() == null || req.getEmployee().getManager() == null ||
+                        !req.getEmployee().getManager().getId().equals(reviewer.getId())) {
                     return ResponseEntity.status(403).body(Map.of("error", "Access denied: employee does not report to you"));
                 }
             }
@@ -277,11 +275,11 @@ public class LeaveController {
             if ("APPROVED".equals(req.getStatus())) {
                 int year = req.getStartDate().getYear();
                 leaveBalanceRepo.findByEmployeeIdAndLeaveTypeIdAndYear(
-                        req.getEmployee().getId(), req.getLeaveType().getId(), year)
-                    .ifPresent(balance -> {
-                        balance.setUsedDays(Math.max(0.0, balance.getUsedDays() - req.getLeaveDays()));
-                        leaveBalanceRepo.save(balance);
-                    });
+                                req.getEmployee().getId(), req.getLeaveType().getId(), year)
+                        .ifPresent(balance -> {
+                            balance.setUsedDays(Math.max(0.0, balance.getUsedDays() - req.getLeaveDays()));
+                            leaveBalanceRepo.save(balance);
+                        });
             }
 
             req.setStatus("CANCELLED");
